@@ -1,0 +1,33 @@
+[DEFAULT]
+banaction = iptables-allports
+ignoreip  = 127.0.0.1/8
+usedns    = no
+
+# Nginx writes to a regular file in this container. Polling is compatible with
+# the Alpine image and notices appended log lines without relying on journald.
+backend = polling
+
+# Escalate repeated bans for repeat offenders, with a hard one-day ceiling.
+bantime = 10m
+bantime.increment = true
+bantime.factor = 2
+bantime.maxtime = 1d
+bantime.rndtime = 30s
+
+# This image is not an SSH server. Disable the distribution's default jail;
+# otherwise Fail2ban may fail to start because /var/log/auth.log is absent.
+[sshd]
+enabled = false
+
+[sshd-ddos]
+enabled = false
+
+[http-flood]
+enabled  = true
+port     = http,https
+filter   = http-flood
+logpath  = /var/log/nginx/access.log
+# Ban after 60 matching requests within any 10-second window. This tolerates
+# short bursts but still reacts quickly to the lab's configured high-rate test.
+maxretry = 60
+findtime = 10s

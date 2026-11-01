@@ -1,0 +1,128 @@
+services:
+  # -------------------------------------------------------------
+  # Frontend Dashboard: Protected with Fail2ban on HTTP (Port 8081)
+  # -------------------------------------------------------------
+  frontend:
+    build: ./services/frontend
+    container_name: service-frontend
+    hostname: frontend
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    ports:
+      - "8081:80"
+    networks:
+      labnet:
+        ipv4_address: 172.29.0.8
+
+  # -------------------------------------------------------------
+  # Backend API: Protected with Fail2ban on HTTP (Port 8082)
+  # -------------------------------------------------------------
+  backend:
+    build: ./services/backend
+    container_name: service-backend
+    hostname: backend
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    ports:
+      - "8082:80"
+    networks:
+      labnet:
+        ipv4_address: 172.29.0.7
+
+  # -------------------------------------------------------------
+  # OpenLDAP: Port-level TLS (LDAPS Port 636) Protection
+  # -------------------------------------------------------------
+  openldap:
+    image: osixia/openldap:1.5.0
+    container_name: service-openldap
+    hostname: ldap.example.com
+    environment:
+      LDAP_ORGANISATION: "Example Corp"
+      LDAP_DOMAIN: "example.com"
+      LDAP_BASE_DN: "dc=example,dc=com"
+      LDAP_ADMIN_PASSWORD: "adminpassword"
+      LDAP_TLS: "true"
+      LDAP_TLS_VERIFY_CLIENT: "never"
+      LDAP_REMOVE_CONFIG_AFTER_SETUP: "false"
+    ports:
+      - "636:636"
+    volumes:
+      - ./services/ldap-auth/ldap:/container/service/slapd/assets/config/bootstrap/ldif/custom
+    networks:
+      labnet:
+        ipv4_address: 172.29.0.5
+
+  # -------------------------------------------------------------
+  # LDAP Auth + JWT Issuer: Protected with Fail2ban on HTTP (Port 8083)
+  # -------------------------------------------------------------
+  ldap-auth:
+    build: ./services/ldap-auth
+    container_name: service-ldap-auth
+    hostname: ldap-auth
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    environment:
+      LDAP_HOST: openldap
+      LDAP_PORT: "636"
+      LDAP_USE_SSL: "true"
+      LDAP_BASE_DN: "dc=example,dc=com"
+      LDAP_ADMIN_DN: "cn=admin,dc=example,dc=com"
+      LDAP_ADMIN_PASSWORD: "adminpassword"
+    ports:
+      - "8083:80"
+    depends_on:
+      - openldap
+    networks:
+      labnet:
+        ipv4_address: 172.29.0.6
+
+  # -------------------------------------------------------------
+  # Reference Lab Targets: Protected vs Unprotected
+  # -------------------------------------------------------------
+  victim-protected:
+    build: ./victim-protected
+    container_name: http-victim-protected
+    hostname: victim-protected
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    ports:
+      - "8084:80"
+    networks:
+      labnet:
+        ipv4_address: 172.29.0.10
+
+  victim-unprotected:
+    build: ./victim-unprotected
+    container_name: http-victim-unprotected
+    hostname: victim-unprotected
+    ports:
+      - "8085:80"
+    networks:
+      labnet:
+        ipv4_address: 172.29.0.11
+
+  attacker:
+    build: ./attacker
+    container_name: http-attacker
+    hostname: attacker
+    depends_on:
+      - victim-protected
+      - victim-unprotected
+    environment:
+      DURATION: 45
+      CONCURRENCY: 150
+      REQUESTS_PER_SECOND: 150
+    networks:
+      labnet:
+        ipv4_address: 172.29.0.20
+
+networks:
+  labnet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.29.0.0/24

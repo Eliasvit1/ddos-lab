@@ -1,0 +1,24 @@
+[DEFAULT]
+banaction = iptables-allports
+ignoreip  = 127.0.0.1/8
+usedns    = no
+backend   = polling
+
+bantime   = 10m
+bantime.increment = true
+bantime.factor = 2
+bantime.maxtime = 1d
+
+[sshd]
+enabled = false
+
+[sshd-ddos]
+enabled = false
+
+[http-flood]
+enabled  = true
+port     = http,https
+filter   = http-flood
+logpath  = /var/log/nginx/access.log
+maxretry = 60
+findtime = 10s
