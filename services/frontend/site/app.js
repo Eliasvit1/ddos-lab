@@ -23,6 +23,34 @@ const responseOutput = document.getElementById("response-output");
 const btnFetchData = document.getElementById("btn-fetch-data");
 const btnHealth = document.getElementById("btn-health");
 
+/**
+ * Sanitizes user input string by encoding HTML entities to prevent Cross-Site
+ * Scripting (XSS) and DOM injection vulnerabilities.
+ * @param {string} str - Raw user input string
+ * @returns {string} Sanitized string
+ */
+function sanitizeInput(str) {
+    if (typeof str !== "string") return "";
+    return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#x27;")
+        .replace(/\//g, "&#x2F;")
+        .trim();
+}
+
+/**
+ * Validates that username matches a strict whitelist of safe characters.
+ * @param {string} username - Candidate username
+ * @returns {boolean} True if username meets validation criteria
+ */
+function isValidUsername(username) {
+    const usernameRegex = /^[a-zA-Z0-9._@+-]{1,64}$/;
+    return usernameRegex.test(username);
+}
+
 function updateOutput(data, statusEl, statusText, isError = false) {
     statusEl.textContent = statusText;
     statusEl.className = `status-badge ${isError ? 'status-error' : 'status-success'}`;
@@ -32,6 +60,18 @@ function updateOutput(data, statusEl, statusText, isError = false) {
 // Handle LDAP Authentication & JWT Acquisition
 loginForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+
+    const rawUsername = usernameInput.value.trim();
+    if (!isValidUsername(rawUsername)) {
+        updateOutput({
+            error: "Validation Error",
+            message: "Username contains invalid characters. Permitted charset: alphanumeric, '.', '_', '@', '+', and '-' up to 64 chars."
+        }, authStatus, "Input Rejected (XSS Prevention)", true);
+        return;
+    }
+
+    const cleanUsername = sanitizeInput(rawUsername);
+
     authStatus.textContent = "Authenticating via LDAPS...";
     authStatus.className = "status-badge status-loading";
     responseOutput.textContent = "Sending credentials over secure channel...";
@@ -44,7 +84,7 @@ loginForm.addEventListener("submit", async (e) => {
                 "Accept": "application/json"
             },
             body: JSON.stringify({
-                username: usernameInput.value.trim(),
+                username: cleanUsername,
                 password: passwordInput.value
             })
         });
@@ -58,7 +98,7 @@ loginForm.addEventListener("submit", async (e) => {
             // Clean display: present user profile without printing raw JWT signature
             const displayProfile = {
                 authenticated: true,
-                user: data.user || usernameInput.value,
+                user: data.user ? (typeof data.user === 'object' ? data.user.username : data.user) : cleanUsername,
                 token_type: data.token_type || "bearer",
                 status: "Session active and token stored securely in memory."
             };

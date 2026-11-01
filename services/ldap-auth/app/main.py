@@ -7,8 +7,9 @@ and generates signed JWT tokens for downstream microservice authorization.
 import os
 import time
 import ssl
+from collections import defaultdict
 from typing import Optional, List
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from ldap3 import Server, Connection, Tls, ALL, SUBTREE
@@ -16,15 +17,51 @@ from ldap3.core.exceptions import LDAPException, LDAPSocketOpenError
 from ldap3.utils.conv import escape_filter_chars
 import jwt
 
-app = FastAPI(title="LDAP TLS Auth Service", version="1.0.0")
+# Restrict documentation exposure in production
+ENABLE_API_DOCS = os.getenv("ENABLE_API_DOCS", "false").lower() == "true"
+
+app = FastAPI(
+    title="LDAP TLS Auth Service",
+    version="1.0.0",
+    docs_url="/docs" if ENABLE_API_DOCS else None,
+    redoc_url="/redoc" if ENABLE_API_DOCS else None,
+    openapi_url="/openapi.json" if ENABLE_API_DOCS else None,
+)
+
+# Safe CORS Configuration: Disallow wildcard origins with credentials
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "ALLOWED_ORIGINS",
+        "http://localhost:8081,http://127.0.0.1:8081,http://service-frontend,http://frontend"
+    ).split(",")
+    if origin.strip()
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
 )
+
+
+@app.middleware("http")
+async def add_security_headers_middleware(request: Request, call_next):
+    """Enforces defense-in-depth HTTP security headers and prevents banner leakage."""
+    response = await call_next(request)
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none';"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    response.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+    response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+    response.headers["X-Permitted-Cross-Domain-Policies"] = "none"
+    response.headers["Server"] = "AuthAPI"
+    return response
 
 # Configuration
 LDAP_HOST = os.getenv("LDAP_HOST", "openldap")
@@ -37,6 +74,29 @@ LDAP_ADMIN_PASSWORD = os.getenv("LDAP_ADMIN_PASSWORD", "adminpassword")
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "super-secret-jwt-key-2026-secure")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_SECONDS = 3600
+
+# Rate Limiting Configuration for Authentication
+AUTH_RATE_LIMIT_REQUESTS = int(os.getenv("AUTH_RATE_LIMIT_REQUESTS", "15"))
+AUTH_RATE_LIMIT_WINDOW = int(os.getenv("AUTH_RATE_LIMIT_WINDOW", "60"))
+_login_rate_limit_records = defaultdict(list)
+
+
+def login_rate_limiter(request: Request):
+    """Enforces client IP rate limiting on login endpoint to mitigate brute-force attacks."""
+    client_ip = request.client.host if request.client else "127.0.0.1"
+    now = time.time()
+    cutoff = now - AUTH_RATE_LIMIT_WINDOW
+
+    timestamps = [t for t in _login_rate_limit_records[client_ip] if t > cutoff]
+    if len(timestamps) >= AUTH_RATE_LIMIT_REQUESTS:
+        retry_after = int(timestamps[0] + AUTH_RATE_LIMIT_WINDOW - now) + 1
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Too many authentication attempts. Please retry after {retry_after}s.",
+            headers={"Retry-After": str(max(1, retry_after))},
+        )
+    timestamps.append(now)
+    _login_rate_limit_records[client_ip] = timestamps
 
 
 class LoginRequest(BaseModel):
@@ -157,12 +217,19 @@ def health_check():
     }
 
 
-@app.post("/login", response_model=AuthTokenResponse, tags=["Authentication"])
+@app.post("/login", response_model=AuthTokenResponse, tags=["Authentication"], dependencies=[Depends(login_rate_limiter)])
 def login(creds: LoginRequest):
     """
     Authenticates user credentials against OpenLDAP via LDAPS (port 636)
     and returns a signed JWT access token.
+    Enforces authentication by strictly rejecting empty credentials / anonymous binds.
     """
+    if not creds.username or not creds.username.strip() or not creds.password or not creds.password.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username and password are required. Anonymous binding is prohibited.",
+        )
+
     try:
         profile = authenticate_ldap_user(creds.username, creds.password)
     except LDAPSocketOpenError:
