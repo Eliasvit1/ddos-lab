@@ -28,7 +28,7 @@ ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
         "ALLOWED_ORIGINS",
-        "http://localhost:8081,http://127.0.0.1:8081,http://service-frontend,http://frontend"
+        "http://localhost:8081,http://127.0.0.1:8081,http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173,http://service-frontend,http://frontend"
     ).split(",")
     if origin.strip()
 ]
