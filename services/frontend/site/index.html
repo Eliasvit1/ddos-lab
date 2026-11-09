@@ -4,66 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-Content-Type-Options" content="nosniff">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' http://localhost:8082 http://localhost:8083; img-src 'self' data:;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost:8082 http://localhost:8083 ws://localhost:*; img-src 'self' data:;">
     <meta name="referrer" content="strict-origin-when-cross-origin">
-    <title>Enterprise Security Dashboard - Hardened Infrastructure</title>
-    <link rel="stylesheet" href="styles.css">
+    <title>Enterprise Security Dashboard - Hardened Infrastructure (React)</title>
+  <script type="module" crossorigin src="/assets/index-QkkpWv2p.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-BsWXzzin.css">
 </head>
 <body>
-    <div class="dashboard-container">
-        <header class="header">
-            <div class="logo-area">
-                <span class="shield-icon">🛡️</span>
-                <h1>Security Operations Dashboard</h1>
-            </div>
-            <div class="status-indicator">
-                <span class="pulse-dot"></span>
-                <span>Protected by Fail2ban + TLS</span>
-            </div>
-        </header>
-
-        <main class="grid-layout">
-            <!-- Authentication Card -->
-            <section class="card auth-card">
-                <h2>LDAP Authentication (Secure TLS/LDAPS)</h2>
-                <p class="card-desc">Authenticate against directory server over port 636 TLS to acquire JWT token.</p>
-                <form id="login-form">
-                    <div class="form-group">
-                        <label for="username">Username:</label>
-                        <input type="text" id="username" placeholder="e.g. alice" value="alice" required maxlength="64" pattern="^[a-zA-Z0-9._@+-]{1,64}$" title="Alphanumeric, dots, dashes, underscores, and email symbols only" autocomplete="username">
-                    </div>
-                    <div class="form-group">
-                        <label for="password">Password:</label>
-                        <input type="password" id="password" placeholder="e.g. alice123" value="alice123" required>
-                    </div>
-                    <button type="submit" id="btn-login" class="btn btn-primary">Authenticate via LDAPS</button>
-                </form>
-                <div id="auth-status" class="status-badge status-idle">Ready</div>
-            </section>
-
-            <!-- Backend Query Card -->
-            <section class="card backend-card">
-                <h2>Protected Backend API</h2>
-                <p class="card-desc">Query microservice using the authenticated JWT authorization bearer.</p>
-                <div class="button-group">
-                    <button id="btn-fetch-data" class="btn btn-secondary">Query /api/data</button>
-                    <button id="btn-health" class="btn btn-secondary">Check Health</button>
-                </div>
-                <div id="api-status" class="status-badge status-idle">Awaiting Query</div>
-            </section>
-
-            <!-- Telemetry / Response Output -->
-            <section class="card telemetry-card">
-                <h2>Service Response & Telemetry Output</h2>
-                <pre id="response-output" class="console-box">{"system": "Ready for operations"}</pre>
-            </section>
-        </main>
-
-        <footer class="footer">
-            <p>Fail2ban & TLS Security Demonstration | Isolated Network 172.29.0.0/24</p>
-        </footer>
-    </div>
-
-    <script src="app.js"></script>
+    <div id="root"></div>
 </body>
 </html>
